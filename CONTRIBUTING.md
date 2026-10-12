@@ -17,9 +17,9 @@ suggesting features and sending pull requests.
 
 ## Reporting a bug
 
-Open an issue with the **Bug report** template. It asks for steps to
-reproduce, what you expected, what happened, and your environment. The two
-details that most often decide whether a bug can be fixed:
+Open an issue and include the steps to reproduce, what you expected, what
+happened, and your environment. The two details that most often decide
+whether a bug can be fixed:
 
 - the **host OS** and the **phone or browser**, with versions
 - whether it happens in **Desktop View, App View, or both**
