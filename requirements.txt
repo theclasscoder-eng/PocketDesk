@@ -1,0 +1,9 @@
+aiortc>=1.9
+aiohttp>=3.9
+mss>=9.0
+numpy>=1.26
+pynput>=1.7.7
+qrcode>=7.4
+uiautomation>=2.0.18; sys_platform == "win32"
+pyobjc-framework-Quartz>=10.0; sys_platform == "darwin"
+python-xlib>=0.33; sys_platform == "linux"

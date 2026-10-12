@@ -1,0 +1,8 @@
+{
+  "name": "PocketDesk",
+  "short_name": "PocketDesk",
+  "start_url": "./",
+  "display": "fullscreen",
+  "background_color": "#111418",
+  "theme_color": "#111418"
+}

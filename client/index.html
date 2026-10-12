@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>PocketDesk</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="devicesheet" class="sheet" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="device-title">
+    <h2 id="device-title">What are you using?</h2>
+    <p>This sets up touch or mouse and keyboard.</p>
+    <div class="choices">
+      <button data-device="mobile">
+        <svg viewBox="0 0 104 104" aria-hidden="true">
+          <rect class="body" x="23.5" y="1.5" width="57" height="101" rx="11"/>
+          <rect class="screen" x="29" y="9" width="46" height="78" rx="4"/>
+          <rect class="keys" x="29" y="91" width="46" height="6" rx="3"/>
+        </svg>
+        <b>Mobile</b>
+        <small>Phone or tablet, by touch</small>
+      </button>
+      <button data-device="desktop">
+        <svg viewBox="0 0 104 104" aria-hidden="true">
+          <rect class="body" x="9.5" y="20.5" width="85" height="56" rx="6"/>
+          <rect class="screen" x="15" y="26" width="74" height="45" rx="2"/>
+          <path class="body" d="M3 84.5h98"/>
+          <rect class="keys" x="40" y="79" width="24" height="3" rx="1.5"/>
+        </svg>
+        <b>Desktop</b>
+        <small>Computer, mouse and keyboard</small>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="sheet" class="sheet" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <h2 id="sheet-title">Choose a Control Style</h2>
+    <p>You can change this at any time.</p>
+    <div class="choices">
+      <button data-style="default">
+        <svg viewBox="0 0 60 104" aria-hidden="true">
+          <rect class="body" x="1.5" y="1.5" width="57" height="101" rx="11"/>
+          <rect class="screen" x="7" y="9" width="46" height="78" rx="4"/>
+          <circle class="touch" cx="34" cy="52" r="5"/>
+          <circle class="ring" cx="34" cy="52" r="10"/>
+          <rect class="keys" x="7" y="91" width="46" height="6" rx="3"/>
+        </svg>
+        <b>Default</b>
+        <small id="default-hint">Touch the screen directly</small>
+      </button>
+      <button data-style="controlled">
+        <svg viewBox="0 0 60 104" aria-hidden="true">
+          <rect class="body" x="1.5" y="1.5" width="57" height="101" rx="11"/>
+          <rect class="screen" x="7" y="9" width="46" height="37" rx="4"/>
+          <rect class="pad" x="7" y="50" width="46" height="26" rx="4"/>
+          <circle class="touch" cx="30" cy="63" r="4"/>
+          <rect class="pad" x="7" y="79" width="22" height="8" rx="3"/>
+          <rect class="pad" x="31" y="79" width="22" height="8" rx="3"/>
+          <rect class="keys" x="7" y="91" width="46" height="6" rx="3"/>
+        </svg>
+        <b>Controlled</b>
+        <small id="controlled-hint">Screen above, trackpad below</small>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div id="viewsheet" class="sheet" hidden>
+  <div class="card" role="dialog" aria-modal="true" aria-labelledby="view-title">
+    <h2 id="view-title">Open</h2>
+    <p>See it as a phone app, or exactly as it is on your computer.</p>
+    <div class="choices">
+      <button data-view="app">
+        <svg viewBox="0 0 60 104" aria-hidden="true">
+          <rect class="body" x="1.5" y="1.5" width="57" height="101" rx="11"/>
+          <rect class="pad" x="24" y="14" width="29" height="10" rx="5"/>
+          <rect class="keys" x="7" y="29" width="38" height="5" rx="2.5"/>
+          <rect class="keys" x="7" y="38" width="44" height="5" rx="2.5"/>
+          <rect class="keys" x="7" y="47" width="30" height="5" rx="2.5"/>
+          <rect class="pad" x="30" y="58" width="23" height="10" rx="5"/>
+          <rect class="keys" x="7" y="73" width="40" height="5" rx="2.5"/>
+          <rect class="screen" x="7" y="86" width="46" height="11" rx="5.5"/>
+        </svg>
+        <b>App View</b>
+        <small>Laid out for your phone</small>
+      </button>
+      <button data-view="desktop">
+        <svg viewBox="0 0 60 104" aria-hidden="true">
+          <rect class="body" x="1.5" y="1.5" width="57" height="101" rx="11"/>
+          <rect class="screen" x="7" y="34" width="46" height="30" rx="3"/>
+          <rect class="keys" x="7" y="34" width="13" height="30" rx="3"/>
+          <rect class="pad" x="24" y="40" width="24" height="3" rx="1.5"/>
+          <rect class="pad" x="24" y="47" width="18" height="3" rx="1.5"/>
+          <rect class="keys" x="7" y="91" width="46" height="6" rx="3"/>
+        </svg>
+        <b>Desktop View</b>
+        <small>The real window, live</small>
+      </button>
+    </div>
+  </div>
+</div>
+
+<main id="app" hidden>
+  <header class="app-top">
+    <button id="app-menu" aria-label="Sessions">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h16"/></svg>
+    </button>
+    <div id="app-title"></div>
+    <button id="app-desktop" aria-label="Desktop view">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4.5" width="18" height="12" rx="2"/><path d="M9 20h6M12 16.5V20"/></svg>
+    </button>
+    <button id="app-close" aria-label="Close">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </header>
+  <div id="app-feed"></div>
+  <p id="app-note" class="note bad" role="alert"></p>
+  <div id="app-controls"></div>
+  <form id="app-composer">
+    <textarea id="app-input" rows="1" autocomplete="off" aria-label="Message"></textarea>
+    <button id="app-send" type="submit" aria-label="Send">
+      <svg class="arrow" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V6M6.5 11.5L12 6l5.5 5.5"/></svg>
+      <svg class="square" viewBox="0 0 24 24" aria-hidden="true"><rect x="7.5" y="7.5" width="9" height="9" rx="1.5"/></svg>
+    </button>
+  </form>
+  <div id="app-shade" hidden></div>
+  <aside id="app-drawer" hidden>
+    <h2>Sessions</h2>
+    <ul id="app-nav"></ul>
+  </aside>
+</main>
+
+<main id="pair" hidden>
+  <div class="pair-body">
+    <svg class="glyph" viewBox="0 0 64 64" aria-hidden="true">
+      <rect x="9" y="13" width="46" height="31" rx="5"/>
+      <path d="M24 53h16M32 44v9"/>
+    </svg>
+    <h1>Connect to Your Computer</h1>
+    <p>Enter the code shown in PocketDesk on your computer.</p>
+    <label class="code" id="code">
+      <input id="pin" inputmode="numeric" maxlength="6" autocomplete="one-time-code" aria-label="Pairing code">
+      <span></span><span></span><span></span><span class="gap"></span><span></span><span></span><span></span>
+    </label>
+    <p id="pair-error" class="note bad" role="alert"></p>
+  </div>
+</main>
+
+<main id="pick" hidden>
+  <header>
+    <button id="refresh" class="link">Refresh</button>
+  </header>
+  <h1 id="host">Computer</h1>
+  <p id="pick-note" class="note"></p>
+
+  <h2>Displays</h2>
+  <ul id="screens" class="group"></ul>
+
+  <h2>Windows</h2>
+  <ul id="windows" class="group"></ul>
+  <p class="foot" id="pick-foot">Share a single window to keep the rest of your computer private.</p>
+
+  <ul class="group">
+    <li><button id="redevice" class="row go"><span>Device</span><small id="device-name">Mobile</small></button></li>
+    <li><button id="restyle" class="row go"><span>Control Style</span><small id="style-name">Default</small></button></li>
+    <li><button id="unpair" class="row destructive">Sign Out</button></li>
+  </ul>
+</main>
+
+<main id="view" hidden>
+  <div id="split">
+    <div id="stage">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="ink"></canvas>
+      <div id="cursor" hidden aria-hidden="true"><svg viewBox="0 0 16 22"><path d="M1.5 1.5v16l4.3-4 2.9 6.6 2.6-1.1-2.9-6.5h6z"/></svg></div>
+    </div>
+    <div id="divider" role="separator" aria-label="Resize screen and trackpad"><i></i></div>
+    <div id="pad">
+      <div id="surface"><span>Trackpad</span></div>
+      <div class="clicks">
+        <button id="lclick" aria-label="Left click"></button>
+        <button id="rclick" aria-label="Right click"></button>
+      </div>
+    </div>
+  </div>
+  <div id="status" hidden><i></i><span></span></div>
+  <button id="zoom" hidden aria-label="Reset zoom"></button>
+  <div id="inkbar" hidden>
+    <button id="undo">Undo</button>
+    <button id="clear">Clear</button>
+  </div>
+  <nav id="bar">
+    <button id="kb" class="tool" aria-label="Keyboard">
+      <svg viewBox="0 0 28 20" aria-hidden="true">
+        <rect x="1.5" y="1.5" width="25" height="17" rx="4"/>
+        <path d="M6.5 7h1M11 7h1M15.5 7h1M20 7h1.5M6.5 10.5h1M11 10.5h1M15.5 10.5h1M20 10.5h1.5M9 14h10"/>
+      </svg>
+    </button>
+    <button id="draw" class="tool" aria-label="Draw" aria-pressed="false">
+      <svg viewBox="0 0 22 22" aria-hidden="true">
+        <path d="M3 19l1.2-4.6L15.6 3a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L7.6 17.8z"/>
+        <path d="M13.6 5l3.4 3.4"/>
+      </svg>
+    </button>
+    <div id="keystrip">
+      <button data-mod="ctrl" aria-label="Control">ctrl</button>
+      <button data-mod="alt" aria-label="Alt">alt</button>
+      <button data-mod="shift" aria-label="Shift">shift</button>
+      <button data-mod="meta" aria-label="Command">cmd</button>
+      <i class="sep"></i>
+      <button data-key="Escape">esc</button>
+      <button data-key="Tab">tab</button>
+      <button data-key="Delete">del</button>
+      <i class="sep"></i>
+      <button data-key="ArrowLeft" aria-label="Left">&#8592;</button>
+      <button data-key="ArrowUp" aria-label="Up">&#8593;</button>
+      <button data-key="ArrowDown" aria-label="Down">&#8595;</button>
+      <button data-key="ArrowRight" aria-label="Right">&#8594;</button>
+    </div>
+    <button id="leave" class="tool link">Done</button>
+  </nav>
+  <textarea id="keys" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Keyboard input"></textarea>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
