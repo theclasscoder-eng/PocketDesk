@@ -27,12 +27,11 @@ router ports, no config files.
 
 ## Key features
 
-- **Share one window, not your life.** Pick a single app and the phone sees
+- **Share one window** Pick a single app and the phone sees
   only that. Close the app and the session ends.
 - **You decide what is reachable.** On first run, choose all apps, a list of
   apps, or the full desktop, and how long a phone stays signed in.
-- **Nothing to install on the phone.** It is a web page. iOS, Android, or
-  another computer.
+- **Tailscale** Just install Tailscale on both devices and log into the same account
 - **Two ways to control.** Touch the picture directly, or split the screen
   into picture plus trackpad with a draggable divider.
 - **Desktop client too.** Open it from another computer and your mouse, wheel
