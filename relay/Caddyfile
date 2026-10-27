@@ -1,0 +1,6 @@
+# Caddy terminates TLS (automatic Let's Encrypt for $DOMAIN) and proxies both
+# HTTPS and the WebSocket upgrade to the relay. reverse_proxy handles WS itself.
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy relay:9000
+}

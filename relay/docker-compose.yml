@@ -1,0 +1,47 @@
+# PocketDesk relay stack: Caddy (TLS) -> relay, plus coturn (TURN) for media.
+# Copy .env.example to .env, fill it in, then:  docker compose up -d --build
+# Run this from the relay/ directory (build context is the repo root, "..").
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - relay
+
+  relay:
+    build:
+      context: ..
+      dockerfile: relay/Dockerfile
+    restart: unless-stopped
+    environment:
+      POCKETDESK_RELAY_HOST_SECRET: ${HOST_SECRET:?set HOST_SECRET in .env}
+      POCKETDESK_STUN_URL: ${STUN_URL}
+      POCKETDESK_TURN_URL: ${TURN_URL}
+      POCKETDESK_TURN_SECRET: ${TURN_SECRET:?set TURN_SECRET in .env}
+    expose:
+      - "9000"
+
+  # coturn relays the WebRTC media when the two peers cannot reach each other
+  # directly. It only ever forwards encrypted DTLS-SRTP. Host networking is used
+  # because TURN opens a wide UDP relay port range.
+  coturn:
+    image: coturn/coturn:4
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+    command: ["-c", "/etc/coturn/turnserver.conf"]
+
+volumes:
+  caddy_data:
+  caddy_config:

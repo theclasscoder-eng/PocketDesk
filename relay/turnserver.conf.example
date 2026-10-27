@@ -1,0 +1,35 @@
+# Copy to turnserver.conf and edit. coturn relays WebRTC media between the two
+# peers when they cannot reach each other directly. It only forwards encrypted
+# DTLS-SRTP, never the decrypted screen or input.
+
+# Ephemeral credentials: the relay mints time-limited username/password pairs
+# with this secret, so no fixed TURN password is ever stored in a client.
+use-auth-secret
+static-auth-secret=change-me-turn-secret   # MUST equal TURN_SECRET in .env
+realm=relay.example.com
+
+fingerprint
+listening-port=3478
+# TURN over TLS (turns:) on 5349 for networks that block plain UDP/TCP. Needs a
+# certificate for your domain (e.g. from certbot). Uncomment and point at it,
+# then add  turns:relay.example.com:5349?transport=tcp  to TURN_URL in .env:
+#tls-listening-port=5349
+#cert=/etc/coturn/certs/fullchain.pem
+#pkey=/etc/coturn/certs/privkey.pem
+
+# The media relay port range (open these UDP ports in the VPS firewall).
+min-port=49160
+max-port=49200
+
+# On a cloud VPS whose public IP is NATed to a private one, uncomment:
+#external-ip=PUBLIC_IP/PRIVATE_IP
+
+# Lock it down: no relaying to the VPS's own/!private networks.
+no-cli
+no-multicast-peers
+denied-peer-ip=0.0.0.0-0.255.255.255
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255

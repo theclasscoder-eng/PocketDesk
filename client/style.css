@@ -226,3 +226,7 @@ main { animation: appear .28s ease-out; }
 #app-nav { flex: 1; min-height: 0; overflow-y: auto; list-style: none; margin: 0; padding: 0 8px; }
 #app-nav button { display: block; width: 100%; padding: 10px 12px; border-radius: 10px; text-align: left; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #app-nav button:active { background: var(--a-box); }
+#app-nav button.folder { position: relative; padding-left: 30px; color: var(--a-dim); font-size: 14px; font-weight: 600; }
+#app-nav button.folder::before { content: ""; position: absolute; left: 13px; top: 50%; width: 6px; height: 6px; margin-top: -4px; border: solid currentColor; border-width: 0 1.6px 1.6px 0; transform: rotate(-45deg); transition: transform .15s; }
+#app-nav button.folder.open::before { transform: rotate(45deg); margin-top: -5px; }
+#app-nav button.leaf { padding-left: 30px; }

@@ -22,8 +22,9 @@
 PocketDesk streams a single app window, or your entire desktop, from your
 computer to a browser on your phone and lets you control it by touch. It is
 self-hosted and open source: one Python command on the computer, a web page on
-the phone, a WireGuard tunnel in between. No account, no relay server, no open
-router ports, no config files.
+the phone, a WireGuard tunnel in between. No account, no open router ports, no
+config files. Would rather not run Tailscale? Point it at your own relay server
+instead — see [Connecting over the internet](#connecting-over-the-internet).
 
 ## Key features
 
@@ -85,6 +86,21 @@ Then:
 Same Wi-Fi and no Tailscale? `python -m pocketdesk --lan` works, but read
 [Hardening](#hardening) first.
 
+## Connecting over the internet
+
+Tailscale is the simplest option, but not the only one. To reach your computer
+from anywhere **without Tailscale**, run your own small relay on a VPS: the
+computer dials *out* to it and the phone opens an `https://` link, so there are
+no open ports at home and it works behind any NAT. The link is TLS-encrypted and
+the screen stream stays end-to-end encrypted (the relay never sees it).
+
+```bash
+python -m pocketdesk --relay wss://relay.example.com --relay-secret <secret>
+```
+
+Setup — deploying the relay (Caddy for TLS + coturn for media) and connecting
+the host — is in **[relay/README.md](relay/README.md)**.
+
 ## Configuration
 
 There are no environment variables and no config file to write. Choices made
@@ -95,6 +111,9 @@ command-line flag.
 | --- | --- | --- |
 | `--port` | `8765` | HTTP port |
 | `--lan` | off | Also listen on the local network, not only Tailscale |
+| `--relay` | off | Connect out to your relay server (see [relay/README.md](relay/README.md)) |
+| `--relay-room` | generated | Room id on the relay; remembered across runs |
+| `--relay-secret` | | Shared secret authorising this host to the relay |
 | `--fps` | `20` | Capture rate, 1 to 60 |
 | `--max-width` | `1600` | Downscale wider frames; lower it to save bandwidth |
 | `--view-only` | off | Stream, but ignore all input |

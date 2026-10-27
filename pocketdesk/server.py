@@ -17,7 +17,8 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 from aiohttp import web
-from aiortc import RTCConfiguration, RTCPeerConnection, RTCSessionDescription
+from aiortc import (RTCConfiguration, RTCIceServer, RTCPeerConnection,
+                    RTCSessionDescription)
 from aiortc.codecs import h264, vpx
 
 from . import access, appview, backends
@@ -45,6 +46,10 @@ class Config:
     view_only: bool = False
     apps: object = "all"  # "all", or a frozenset of allowed app names
     desktop: bool = True  # offer whole displays, which show and control everything
+    # ICE servers for the WebRTC peer connection. Empty = host addresses only
+    # (same-tunnel / same-LAN). A relay deployment fills this with STUN + TURN
+    # so media can traverse NAT. Each item: {"urls", "username"?, "credential"?}.
+    ice_servers: tuple = ()
 
 
 class Session:
@@ -89,6 +94,17 @@ def _json_error(status, message):
     return web.json_response({"error": message}, status=status)
 
 
+def verify_token(app, authorization):
+    """The device a Bearer Authorization value identifies, or None.
+
+    Shared by the HTTP middleware and the relay transport so both gate calls
+    with the exact same check. The relay never holds the AES key, so only the
+    host can ever turn a token back into a device here.
+    """
+    scheme, _, token = (authorization or "").partition(" ")
+    return app[AUTH].verify(token) if scheme == "Bearer" else None
+
+
 @web.middleware
 async def guard(request, handler):
     # Reject cross-site POSTs (CSRF / DNS rebinding).
@@ -96,8 +112,7 @@ async def guard(request, handler):
     if request.method == "POST" and origin and urlsplit(origin).netloc != request.host:
         return _json_error(403, "Cross-origin request refused.")
     if request.path.startswith("/api/") and request.path != "/api/pair":
-        scheme, _, token = request.headers.get("Authorization", "").partition(" ")
-        device = request.app[AUTH].verify(token) if scheme == "Bearer" else None
+        device = verify_token(request.app, request.headers.get("Authorization", ""))
         if not device:
             return _json_error(401, "Not paired.")
         request["device"] = device
@@ -113,16 +128,24 @@ async def index(request):
     return web.FileResponse(CLIENT_DIR / "index.html")
 
 
+async def do_pair(app, device, params):
+    try:
+        token = app[AUTH].pair(params.get("pin", ""), params.get("name", "phone"))
+    except PairingError as exc:
+        return 403, {"error": str(exc)}
+    except (ValueError, AttributeError):
+        return 400, {"error": "Bad request."}
+    log.info("Paired a new device")
+    return 200, {"token": token}
+
+
 async def pair(request):
     try:
         body = await request.json()
-        token = request.app[AUTH].pair(body.get("pin", ""), body.get("name", "phone"))
-    except PairingError as exc:
-        return _json_error(403, str(exc))
-    except (ValueError, AttributeError):
+    except (ValueError, TypeError):
         return _json_error(400, "Bad request.")
-    log.info("Paired a new device from %s", request.remote)
-    return web.json_response({"token": token})
+    status, data = await do_pair(request.app, None, body)
+    return web.json_response(data, status=status)
 
 
 async def _visible(app):
@@ -138,68 +161,64 @@ async def _visible(app):
     return screens, [w for w in windows if access.allowed(apps, w)]
 
 
-async def _app_window(request, body=None):
+async def _app_window(app, params):
     """The window id an app-view request names, if this host shares it."""
-    raw = request.query.get("id") if body is None else body.get("id")
     try:
-        hwnd = int(raw)
+        hwnd = int(params.get("id"))
     except (TypeError, ValueError):
         return None
-    _, windows = await _visible(request.app)
+    _, windows = await _visible(app)
     return hwnd if appview.available() and any(w["id"] == hwnd for w in windows) else None
 
 
-async def app_state(request):
-    hwnd = await _app_window(request)
+async def do_app_state(app, device, params):
+    hwnd = await _app_window(app, params)
     if hwnd is None:
-        return _json_error(403, "This computer does not share that.")
+        return 403, {"error": "This computer does not share that."}
     try:
         model = await appview.snapshot(asyncio.get_running_loop(), hwnd)
     except Exception as exc:
         log.warning("App view failed: %s", exc)
-        return _json_error(410, "That window was closed.")
-    model["viewOnly"] = request.app[CONFIG].view_only
-    return web.json_response(model)
+        return 410, {"error": "That window was closed."}
+    model["viewOnly"] = app[CONFIG].view_only
+    return 200, model
 
 
-async def app_press(request):
-    body = await request.json()
-    hwnd = await _app_window(request, body)
-    if hwnd is None or request.app[CONFIG].view_only:
-        return _json_error(403, "Not allowed.")
-    ok = await appview.press(asyncio.get_running_loop(), hwnd, str(body.get("ref")))
-    return web.json_response({"ok": ok})
+async def do_app_press(app, device, params):
+    hwnd = await _app_window(app, params)
+    if hwnd is None or app[CONFIG].view_only:
+        return 403, {"error": "Not allowed."}
+    ok = await appview.press(asyncio.get_running_loop(), hwnd, str(params.get("ref")))
+    return 200, {"ok": ok}
 
 
-async def app_scroll(request):
+async def do_app_scroll(app, device, params):
     """Scroll the real app's message list to match the phone."""
-    body = await request.json()
-    hwnd = await _app_window(request, body)
-    pos = body.get("pos")
-    if hwnd is None or request.app[CONFIG].view_only:
-        return _json_error(403, "Not allowed.")
+    hwnd = await _app_window(app, params)
+    pos = params.get("pos")
+    if hwnd is None or app[CONFIG].view_only:
+        return 403, {"error": "Not allowed."}
     if not isinstance(pos, (int, float)) or not math.isfinite(pos):
-        return _json_error(400, "Bad request.")
+        return 400, {"error": "Bad request."}
     ok = await appview.scroll(asyncio.get_running_loop(), hwnd, float(pos))
-    return web.json_response({"ok": ok})
+    return 200, {"ok": ok}
 
 
-async def app_send(request):
+async def do_app_send(app, device, params):
     """Type a message into the app's own prompt box and press Enter."""
-    body = await request.json()
-    hwnd = await _app_window(request, body)
-    state = request.app[STATE]
-    inj, text = state["injector"], body.get("text")
+    hwnd = await _app_window(app, params)
+    state = app[STATE]
+    inj, text = state["injector"], params.get("text")
     if hwnd is None or inj is None or not isinstance(text, str) or not text.strip():
-        return _json_error(403, "Not allowed.")
+        return 403, {"error": "Not allowed."}
     loop = asyncio.get_running_loop()
     window = state["backend"].WindowSource(hwnd)
     # Keys go to whatever has focus, so only type once the prompt box has it.
     await loop.run_in_executor(None, window.focus)
     if not window.is_foreground():
         log.warning("App view: Windows would not bring the app to the front")
-        return _json_error(409, "Windows would not bring the app to the front. "
-                                "Click it once on the computer, then send again.")
+        return 409, {"error": "Windows would not bring the app to the front. "
+                              "Click it once on the computer, then send again."}
     focused, centre = await appview.focus_composer(loop, hwnd)
     if not focused and centre:
         # Some builds ignore a programmatic focus; a real click always works.
@@ -209,23 +228,52 @@ async def app_send(request):
         focused = await appview.has_focus(loop, hwnd)
     if not focused:
         log.warning("App view: prompt box did not take focus")
-        return _json_error(409, "Could not find the message box in the app. "
-                                "Try Desktop View for this message.")
+        return 409, {"error": "Could not find the message box in the app. "
+                              "Try Desktop View for this message."}
     for i, line in enumerate(text[:4000].replace("\r", "").split("\n")):
         if i:
             inj.key("Enter", ["shift"])  # new line without sending
         inj.text(line)
     inj.key("Enter")
-    return web.json_response({"ok": True})
+    return 200, {"ok": True}
+
+
+async def do_sources(app, device, params):
+    screens, windows = await _visible(app)
+    cfg = app[CONFIG]
+    return 200, {"screens": screens, "windows": windows,
+                 "limited": cfg.apps != "all", "desktop": cfg.desktop,
+                 "host": platform.node(), "platform": sys.platform,
+                 "viewOnly": cfg.view_only}
+
+
+async def app_state(request):
+    status, data = await do_app_state(request.app, request.get("device"),
+                                      dict(request.query))
+    return web.json_response(data, status=status)
+
+
+async def app_press(request):
+    status, data = await do_app_press(request.app, request.get("device"),
+                                      await request.json())
+    return web.json_response(data, status=status)
+
+
+async def app_scroll(request):
+    status, data = await do_app_scroll(request.app, request.get("device"),
+                                       await request.json())
+    return web.json_response(data, status=status)
+
+
+async def app_send(request):
+    status, data = await do_app_send(request.app, request.get("device"),
+                                     await request.json())
+    return web.json_response(data, status=status)
 
 
 async def sources(request):
-    screens, windows = await _visible(request.app)
-    return web.json_response({"screens": screens, "windows": windows,
-                              "limited": request.app[CONFIG].apps != "all",
-                              "desktop": request.app[CONFIG].desktop,
-                              "host": platform.node(), "platform": sys.platform,
-                              "viewOnly": request.app[CONFIG].view_only})
+    status, data = await do_sources(request.app, request.get("device"), {})
+    return web.json_response(data, status=status)
 
 
 def _make_source(spec, backend):
@@ -239,26 +287,38 @@ def _make_source(spec, backend):
     raise ValueError("Unknown source.")
 
 
-async def offer(request):
-    app, cfg = request.app, request.app[CONFIG]
+def _rtc_config(cfg):
+    """ICE configuration for a new peer connection.
+
+    With no configured servers the peer advertises only the host's own
+    addresses, so media flows directly over a shared tunnel/LAN and nothing is
+    sent to a third party. A relay deployment supplies STUN + TURN here so the
+    two peers can reach each other across the internet; the relay/TURN only
+    ever forward opaque DTLS-SRTP, never the decrypted screen or input.
+    """
+    servers = [RTCIceServer(urls=s["urls"], username=s.get("username"),
+                            credential=s.get("credential"))
+               for s in cfg.ice_servers]
+    return RTCConfiguration(iceServers=servers)
+
+
+async def do_offer(app, device, params):
+    cfg = app[CONFIG]
     state = app[STATE]
     try:
-        body = await request.json()
-        desc = RTCSessionDescription(sdp=body["sdp"], type=body["type"])
-        spec = body.get("source") or {}
+        desc = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
+        spec = params.get("source") or {}
         screens, windows = await _visible(app)
         offered = screens if spec.get("kind") == "screen" else windows
         if not any(s["id"] == spec.get("id") for s in offered):
-            return _json_error(403, "This computer does not share that.")
+            return 403, {"error": "This computer does not share that."}
         source = _make_source(spec, state["backend"])
     except (ValueError, KeyError, TypeError, backends.SourceGone) as exc:
-        return _json_error(400, str(exc) or "Bad request.")
+        return 400, {"error": str(exc) or "Bad request."}
 
     await _close_session(state)  # one controller at a time
 
-    # No ICE servers: candidates are the host's own addresses only, so media
-    # flows directly over the tunnel and nothing is sent to a third party.
-    pc = RTCPeerConnection(RTCConfiguration(iceServers=[]))
+    pc = RTCPeerConnection(_rtc_config(cfg))
     session = Session(pc, source, None)
 
     async def end():
@@ -303,8 +363,13 @@ async def offer(request):
     await pc.setLocalDescription(await pc.createAnswer())
     if not cfg.view_only:
         source.focus()
-    return web.json_response({"sdp": pc.localDescription.sdp,
-                              "type": pc.localDescription.type})
+    return 200, {"sdp": pc.localDescription.sdp, "type": pc.localDescription.type}
+
+
+async def offer(request):
+    status, data = await do_offer(request.app, request.get("device"),
+                                  await request.json())
+    return web.json_response(data, status=status)
 
 
 def _handle_input(app, session, raw):
@@ -422,6 +487,22 @@ async def _pin_rotator(app):
     yield
     task.cancel()
     await _close_session(app[STATE])
+
+
+# Core request handlers keyed by API path. A non-HTTP transport (the relay
+# link) drives the exact same logic the HTTP routes below do, so there is one
+# implementation of pairing, source listing, the WebRTC offer and App View.
+# "/api/pair" is the only unauthenticated path; everything else needs a token.
+DISPATCH = {
+    "/api/pair": do_pair,
+    "/api/sources": do_sources,
+    "/api/offer": do_offer,
+    "/api/app": do_app_state,
+    "/api/app/press": do_app_press,
+    "/api/app/send": do_app_send,
+    "/api/app/scroll": do_app_scroll,
+}
+OPEN_PATHS = {"/api/pair"}  # reachable before pairing
 
 
 def build_app(auth: Auth, cfg: Config) -> web.Application:

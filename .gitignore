@@ -1,3 +1,7 @@
 .venv/
 __pycache__/
 *.pyc
+
+# Relay deployment secrets — never commit these (copied from the .example files)
+relay/.env
+relay/turnserver.conf

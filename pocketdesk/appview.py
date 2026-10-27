@@ -127,6 +127,22 @@ def _clean(text):
     return re.sub(r"[ \t ]+", " ", text).strip()[:MAX_TEXT]
 
 
+def _remember(refs, ctrl):
+    """Give a control an id that stays the same from one snapshot to the next.
+
+    The phone taps things it drew from an earlier snapshot, so ids must not
+    depend on how many other controls happen to exist right now.
+    """
+    try:
+        key = "r" + ".".join(str(part) for part in ctrl.GetRuntimeId())
+    except Exception:
+        key = ""
+    if len(key) < 2 or key in refs:
+        key = f"n{len(refs)}"
+    refs[key] = ctrl
+    return key
+
+
 class _Feed:
     """Turns the message area into [{role, blocks}]."""
 
@@ -200,9 +216,7 @@ class _Feed:
             self.walk(kid)
 
     def _ref(self, node):
-        ref = str(len(self.refs))
-        self.refs[ref] = node.ctrl
-        return ref
+        return _remember(self.refs, node.ctrl)
 
 
 def _snapshot(hwnd):
@@ -211,9 +225,7 @@ def _snapshot(hwnd):
     refs = {}
 
     def ref(node):
-        key = str(len(refs))
-        refs[key] = node.ctrl
-        return key
+        return _remember(refs, node.ctrl)
 
     def wide(node, least=90):
         # Icon-only buttons are narrow; the ones worth showing carry a label.
@@ -244,8 +256,18 @@ def _snapshot(hwnd):
     nav = []
     if side:
         for b in _all(side, lambda n: n.type == "Button" and n.name.strip()):
-            if wide(b):
-                nav.append({"ref": ref(b), "label": _clean(b.name)[:60]})
+            if not wide(b):
+                continue
+            item = {"ref": ref(b), "label": _clean(b.name)[:60]}
+            # Folders expand in place instead of opening anything.
+            try:
+                fold = b.ctrl.GetPattern(auto.PatternId.ExpandCollapsePattern)
+                if fold:
+                    item["group"] = True
+                    item["open"] = fold.ExpandCollapseState != 0
+            except Exception:
+                pass
+            nav.append(item)
     box = None
     for n in _all(main, lambda n: n.type == "Edit" or n.role == "textbox"):
         box = n
@@ -293,6 +315,13 @@ def _press(hwnd, ref):
     ctrl = _refs.get(hwnd, {}).get(ref)
     if ctrl is None or ref in ("composer", "scroller"):
         return False
+    try:
+        fold = ctrl.GetPattern(auto.PatternId.ExpandCollapsePattern)
+        if fold:
+            fold.Expand() if fold.ExpandCollapseState == 0 else fold.Collapse()
+            return True
+    except Exception:
+        pass
     for pattern_id, method in ((auto.PatternId.InvokePattern, "Invoke"),
                                (auto.PatternId.SelectionItemPattern, "Select"),
                                (auto.PatternId.TogglePattern, "Toggle")):

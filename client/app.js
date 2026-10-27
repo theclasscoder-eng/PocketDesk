@@ -24,21 +24,82 @@ function setToken(value) {
   } catch (e) { /* keep it in memory only */ }
 }
 
-async function api(path, body) {
-  const headers = {};
-  if (body) headers['Content-Type'] = 'application/json';
-  if (token) headers.Authorization = 'Bearer ' + token;
-  const res = await fetch(path, {
-    method: body ? 'POST' : 'GET', headers, body: body ? JSON.stringify(body) : undefined,
+// ---- Transport -----------------------------------------------------------
+// Local / LAN: the host serves this page, so api() talks to it directly with
+// fetch(). Relay: the relay serves this page and injects window.POCKETDESK, so
+// api() tunnels every request over one WebSocket to the relay, which forwards
+// it to the host and routes the reply back by id. Either way the WebRTC media
+// in connect() still flows peer-to-peer, never through this control channel.
+const RELAY = window.POCKETDESK || null;
+
+let relaySocket = null, relayReady = null, relaySeq = 0;
+const relayPending = new Map();
+
+function relayConnect() {
+  if (relayReady) return relayReady;
+  relayReady = new Promise((resolve, reject) => {
+    const base = RELAY.relay.replace(/\/$/, '');
+    const ws = new WebSocket(base + '/ws/view/' + RELAY.room);
+    const fail = (message) => {
+      if (relaySocket === ws || relaySocket === null) { relaySocket = null; relayReady = null; }
+      for (const p of relayPending.values()) p.reject(new Error(message));
+      relayPending.clear();
+      reject(new Error(message));
+    };
+    ws.addEventListener('open', () => { relaySocket = ws; resolve(ws); });
+    ws.addEventListener('message', (e) => {
+      let msg; try { msg = JSON.parse(e.data); } catch (err) { return; }
+      const p = relayPending.get(msg.id);
+      if (p) { relayPending.delete(msg.id); p.resolve(msg); }
+    });
+    ws.addEventListener('close', () => fail('The connection to the relay dropped.'));
+    ws.addEventListener('error', () => fail('Could not reach the relay.'));
   });
-  const data = await res.json().catch(() => ({}));
-  if (res.status === 401) {
+  return relayReady;
+}
+
+async function relayRequest(path, body) {
+  const ws = await relayConnect();
+  let params = {};
+  const q = path.indexOf('?');
+  if (q >= 0) {
+    for (const [k, v] of new URLSearchParams(path.slice(q + 1))) params[k] = v;
+    path = path.slice(0, q);
+  }
+  if (body) Object.assign(params, body);
+  const id = 'q' + (++relaySeq);
+  return new Promise((resolve, reject) => {
+    relayPending.set(id, { resolve, reject });
+    try {
+      ws.send(JSON.stringify({ id, path, token: token || null,
+                               body: Object.keys(params).length ? params : null }));
+    } catch (err) { relayPending.delete(id); reject(err); }
+  });
+}
+
+async function api(path, body) {
+  let status, data;
+  if (RELAY) {
+    const reply = await relayRequest(path, body);
+    status = reply.status;
+    data = reply.data || {};
+  } else {
+    const headers = {};
+    if (body) headers['Content-Type'] = 'application/json';
+    if (token) headers.Authorization = 'Bearer ' + token;
+    const res = await fetch(path, {
+      method: body ? 'POST' : 'GET', headers, body: body ? JSON.stringify(body) : undefined,
+    });
+    data = await res.json().catch(() => ({}));
+    status = res.status;
+  }
+  if (status === 401) {
     setToken(null);
     show('pair');
   }
-  if (!res.ok) {
-    const err = new Error(data.error || res.statusText);
-    err.status = res.status;
+  if (status < 200 || status >= 300) {
+    const err = new Error(data.error || ('Request failed (' + status + ')'));
+    err.status = status;
     throw err;
   }
   return data;
@@ -312,9 +373,16 @@ function renderApp(model) {
   }
   const nav = $('#app-nav');
   nav.textContent = '';
+  let inFolders = false;
   for (const n of model.nav) {
-    const li = el('li'), btn = el('button', '', n.label);
-    btn.addEventListener('click', () => { closeDrawer(); if (!model.viewOnly) pressApp(n.ref); });
+    // Folders open and close in place; anything else switches and dismisses.
+    inFolders = inFolders || !!n.group;
+    const kind = n.group ? 'folder' + (n.open ? ' open' : '') : inFolders ? 'leaf' : '';
+    const li = el('li'), btn = el('button', kind, n.label);
+    btn.addEventListener('click', () => {
+      if (!n.group) closeDrawer();
+      if (!model.viewOnly) pressApp(n.ref);
+    });
     li.append(btn);
     nav.append(li);
   }
@@ -417,7 +485,9 @@ function iceComplete(conn) {
   if (conn.iceGatheringState === 'complete') return Promise.resolve();
   return new Promise((resolve) => {
     const done = () => { clearTimeout(timer); resolve(); };
-    const timer = setTimeout(done, 3000);
+    // Direct candidates arrive at once; gathering a TURN relay candidate over
+    // the relay deployment can take longer, so allow more time when one is set.
+    const timer = setTimeout(done, RELAY ? 8000 : 3000);
     conn.addEventListener('icegatheringstatechange', () => {
       if (conn.iceGatheringState === 'complete') done();
     });
@@ -429,8 +499,9 @@ async function connect(source) {
   show('view');
   fitViewport();
   status('Connecting', true);
-  // No STUN/TURN: both ends are already on the same private tunnel.
-  pc = new RTCPeerConnection({ iceServers: [] });
+  // Local / LAN: no ICE servers, both ends share a network. Relay: the relay
+  // injects STUN + a short-lived TURN credential so media can cross NAT.
+  pc = new RTCPeerConnection({ iceServers: (RELAY && RELAY.ice) || [] });
   const conn = pc;
   pc.addTransceiver('video', { direction: 'recvonly' });
   dc = pc.createDataChannel('input');
